@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE configuration PUBLIC "-//mybatis.org//DTD Config 3.0//EN" "http://mybatis.org/dtd/mybatis-3-config.dtd">	<!-- 여기서 부터 끝까지 붙여 넣음 -->
+
+<configuration>
+<settings>
+<setting name="cacheEnabled" value="false"/>
+<setting name="useGeneratedKeys" value="true"/>
+<setting name="defaultExecutorType" value="REUSE"/>
+</settings>
+
+<typeAliases>	<!-- domain에 있는 ValueObject의 별명을 지어주어 mapper.xml에서 사용하기 쉽게 해준다. 얼마든지 추가 가능! -->
+<typeAlias type="net.su.ref.valueObject.MemValueObject" alias="memVo"/>
+<typeAlias type="net.su.ref.valueObject.RefValueObject" alias="refVo"/>
+<!-- <typeAlias type="net.su.bcms.valueObject.NmeCardHistrValueObject" alias="nmeCardHistrVo"/> -->
+<!-- <typeAlias type="net.su.bcms.valueObject.SearchAndPageValueObject" alias="sapVo"/> -->
+
+</typeAliases>
+
+<mappers>	<!-- 사용할 mapper.xml의 위치를 setting해 두는 곳이다. 얼마든지 추가 가능! -->
+<mapper resource="/mybatis/sql/commonMapper.xml"/>
+<mapper resource="/mybatis/sql/refMapper.xml"/>
+<mapper resource="/mybatis/sql/analMapper.xml"/>
+<!-- <mapper resource="/mybatis/sql/recvNmeCardMapper.xml"/> -->
+<!-- <mapper resource="/mybatis/sql/sharNmeCardMapper.xml"/> -->
+<!-- <mapper resource="/mybatis/sql/sharMapper.xml"/> -->
+<!-- <mapper resource="/mybatis/sql/groupMapper.xml"/> -->
+</mappers>
+
+</configuration>

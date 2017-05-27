@@ -1,0 +1,455 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="refMapper">
+
+	<resultMap id="refValues" type="refVO">
+		<result property = "mem_seq" column="mem_seq"/>
+		<result property = "mem_nme" column="mem_nme"/>		
+		<result property = "barcd" column="barcd"/> <!-- 바코드번호 -->
+		<result property = "food_nme" column="food_nme"/> <!-- 식품 이름 -->
+		<result property = "food_img" column="food_img"/> <!-- 식품 이미지 경로 -->
+		<result property = "supplied_amount" column="supplied_amount"/> <!-- 1회 제공량 -->
+		<result property = "avg_expiration_dat" column="avg_expiration_dat"/> <!-- 평균 유통기한 일수 -->
+		<result property = "calorie" column="calorie"/> <!-- 열량 -->
+		<result property = "carbohydrate" column="carbohydrate"/> <!--  탄수화물 -->
+		<result property = "protein" column="protein"/> <!-- 단백질 -->
+		<result property = "fat" column="fat"/> <!-- 지방 -->
+		<result property = "sugars" column="sugars"/> <!-- 당류 -->
+		<result property = "salt" column="salt"/> <!--  나트륨 -->
+		<result property = "cholesterol" column="cholesterol"/> <!-- 콜레스테롤 -->
+		<result property = "saturated_fat" column="saturated_fat"/> <!-- 포화지방산 -->
+		<result property = "unsaturated_fat" column="unsaturated_fat"/> <!-- 트랜스지방산 -->
+		<result property = "input_history_seq" column="input_history_seq"/> <!-- 입고내역 고유값 -->
+		
+		<result property = "deadLine" column="deadLine"/> <!-- 유통기한 임박 7일 기준 -->
+		<result property = "expiration_dat" column="expiration_dat"/> <!-- 유통기한 -->
+		<result property = "input_datetime" column="input_datetime"/> <!-- 입고일 -->
+		<result property = "input_cont" column="input_cont"/> <!-- 입고횟수 -->
+		<result property = "intk_rat" column="intk_rat"/> <!-- 섭취율 -->
+		<result property = "order_by" column="order_by"/> <!-- 정렬기준 -->
+
+	</resultMap>
+	
+	<!-- 바코드 번호로 식품 상세정보(바코드tb) 조회 -->
+    <select id="barcdInfoSelect" parameterType="refVO" resultMap="refValues">
+		SELECT 		barcd
+					, supplied_amount
+					, avg_expiration_dat
+					, calorie
+					, carbohydrate
+					, protein
+					, fat
+					, sugars
+					, salt
+					, cholesterol
+					, saturated_fat
+					, unsaturated_fat
+					, food_nme
+					, food_img
+ 		FROM 		barcd_tb
+ 		WHERE		barcd = #{barcd}
+	</select>
+	
+	<!--  조회된 바코드 정보 등록(inputHistoryInsert)입고내역 -->
+    <insert id="inputHistoryInsert" parameterType="refVO" >
+        INSERT INTO		input_history_tb
+						(
+			            input_history_seq
+			            , input_cont
+			            , input_datetime
+			            , refrigerator_seq
+			            , mem_seq
+			            , supplied_amount
+			            , calorie
+			            , food_nme
+			            , food_img				            
+			            , carbohydrate
+			            , protein
+			            , fat
+			            , sugars
+			            , salt
+			            , cholesterol
+			            , saturated_fat
+			            , unsaturated_fat
+			            , barcd
+			            )
+			            
+		 SELECT			
+						(SELECT input_history_seq FROM (SELECT IFNULL(MAX(input_history_seq),0)+1 AS input_history_seq FROM input_history_tb) AS A)
+						, (SELECT COUNT(*)+1 FROM input_history_tb WHERE barcd = #{barcd})
+						, SYSDATE()
+						, #{refrigerator_seq}
+						, #{mem_seq}
+						, supplied_amount
+			            , calorie
+			            , food_nme
+			            , food_img				            
+			            , carbohydrate
+			            , protein
+			            , fat
+			            , sugars
+			            , salt
+			            , cholesterol
+			            , saturated_fat
+			            , unsaturated_fat
+			            , barcd
+		FROM			barcd_tb
+        WHERE			barcd = #{barcd}     
+    </insert>
+    
+	<!--  조회된 바코드 정보 등록(havFoodInsert)보유식품 -->
+    <insert id="havFoodInsert" parameterType="refVO" >
+	    INSERT INTO 	hav_food_tb(
+							input_history_seq
+							,intk_rat
+				            ,expiration_dat
+						)
+	            
+		VALUE			(
+							(SELECT IFNULL(MAX(input_history_seq),0) FROM input_history_tb)           
+							, 0
+			            	,  date_add(sysdate(), interval #{avg_expiration_dat} day)
+		            	)
+   	</insert>
+    
+    
+    <!--  보유식품 리스트 조회-->
+    <select id="havRefList"  parameterType="refVO" resultMap="refValues">
+        SELECT	 		i.input_history_seq as input_history_seq
+        				, i.food_img as food_img
+        				, i.food_nme as food_nme
+        				, i.supplied_amount as supplied_amount
+        				, h.intk_rat as intk_rat
+        				, i.calorie as calorie
+        				, date_format(i.input_datetime, '%y-%m-%d') as input_datetime
+        				, date_format(h.expiration_dat, '%y-%m-%d') as expiration_dat
+        				, i.input_cont as input_cont
+        				, (CASE WHEN to_days(expiration_dat) - to_days(now()) <![CDATA[ < ]]> 7 THEN 'Y' 
+								ELSE 'N'
+							END) as deadLine
+						
+						
+		FROM 			hav_food_tb h
+		JOIN 			input_history_tb i
+		ON 				h.input_history_seq = i.input_history_seq
+		WHERE			i.refrigerator_seq = #{refrigerator_seq}  
+		AND				i.food_nme like '%${food_nme}%'
+<!-- 		AND				h.intk_rat <![CDATA[ < ]]> 100 -->
+
+<!-- 		<if test="order_by eq 'input_history_seq'"> -->
+<!-- 		    ORDER -->
+<!-- 			BY				i.input_history_seq DESC -->
+<!-- 		</if> -->
+		
+		<choose>
+			<when test="order_by eq 'input_history_seq'">
+				ORDER
+				BY				i.input_history_seq DESC
+			</when>
+			<when test="order_by eq 'expiration_dat'">
+				ORDER
+				BY				h.expiration_dat ASC
+			</when>
+			<otherwise>
+				ORDER
+				BY				i.input_history_seq DESC
+			</otherwise>
+		</choose>	
+		LIMIT			#{recordCountPerPage} OFFSET #{firstRecordIndex}
+    </select>
+
+    <!-- 보유식품 리스트 개수 조회-->
+    <select id="havRefListCount"  parameterType="refVO" resultType="int">
+        SELECT	 		count(*)
+		FROM 			hav_food_tb h
+		JOIN 			input_history_tb i
+		ON 				h.input_history_seq = i.input_history_seq
+		WHERE			i.refrigerator_seq = #{refrigerator_seq}  
+		AND				i.food_nme like '%${food_nme}%'
+<!-- 		AND				h.intk_rat <![CDATA[ < ]]> 100 -->
+    </select>
+    
+    
+	<!--  보유식품 버림 처리 (hav_food_tb)-->
+    <delete id="prodctDelete" parameterType="refVO">
+        DELETE 
+		FROM			hav_food_tb
+		WHERE			input_history_seq IN
+       					<foreach collection="refChkGroup" item="item" open="(" close=")" separator=" , "> 
+       					    #{item} 
+       					</foreach>
+<!-- 						array로 넘겼을 때 -->
+<!-- 						 <foreach collection="sUser_type" item="type" index="index"  open="(" close=")" separator=","> -->
+<!-- 				            #{type[index]} -->
+<!-- 				        </foreach>  -->
+    </delete>
+    
+    
+    <!--  보유식품 버림 처리 (input_history_tb)-->
+    <update id="inputHistoryWhetherUpdate">
+         UPDATE 		input_history_tb
+		 SET			whether = '버림'
+		 WHERE			input_history_seq IN 
+		 				<foreach collection="refChkGroup" item="item" open="(" close=")" separator=" , "> 
+       					    #{item}
+       					</foreach>
+    </update>
+    
+    
+    
+    <!--  가족구성원 리스트 조회-->
+    <select id="fmyMemSelect"  parameterType="refVO" resultMap="refValues">
+        SELECT 			m.mem_seq as mem_seq
+        				, m.mem_nme as mem_nme
+		FROM 			refrigerator_bridg_tb rb
+		JOIN 			mem_tb m 
+		ON 				rb.mem_seq = m.mem_seq 
+		WHERE 			refrigerator_seq = (SELECT 	refrigerator_seq
+											FROM 	refrigerator_bridg_tb
+											WHERE	mem_seq = #{mem_seq})
+
+    </select>
+    
+    
+    
+	<!-- 섭취율 선택, 가족 구성원 선택 후  식품 섭취 기존 섭취량, 섭취율 각 계산(intkRatChk) 후 (섭취정보tb insert)-->
+    <insert  id="prodctIntk"  parameterType="refVO" >
+
+        INSERT 
+        INTO 			intk_info_tb 
+        			 	( mem_seq
+        			 	, intk_datetime
+        			 	, calorie
+        			 	, carbohydrate	
+        			 	, protein
+        			 	, fat
+        			 	, sugars
+        			 	, salt
+        			 	, cholesterol
+        			 	, saturated_fat
+        			 	, unsaturated_fat
+        			 	, input_history_seq
+        			 	, intk_rat 
+        			 	)
+			 	
+        <foreach collection="refList" item="refList"  separator=" UNION ">				 	
+       		<foreach collection="fmyCheckGroup" item="fmySeq"  separator=" UNION  ">
+				SELECT 
+								#{fmySeq} as mem_seq
+								, SYSDATE() as intk_datetime
+								, calorie * #{refList.intk_rat}/100 as calorie
+								, carbohydrate * #{refList.intk_rat}/100 as carbohydrate
+								, protein * #{refList.intk_rat}/100 as protein
+								, fat * #{refList.intk_rat}/100 as fat
+								, sugars * #{refList.intk_rat}/100 as sugars
+								, salt * #{refList.intk_rat}/100 as salt
+								, cholesterol * #{refList.intk_rat}/100 as cholesterol
+								, saturated_fat * #{refList.intk_rat}/100 as saturated_fat
+								, unsaturated_fat * #{refList.intk_rat}/100 as unsaturated_fat
+								, #{refList.input_history_seq} as input_history_seq
+								, #{refList.intk_rat} as intk_rat
+				FROM			input_history_tb  
+		        WHERE			input_history_seq = #{refList.input_history_seq}
+        	</foreach>
+        </foreach>
+        
+    </insert>
+    
+    
+	<!-- 현재 섭취율이 선택한 섭취율보다 더 높거나 같은 경우의 식품 seq 찾아내서 제거한 seq 및 각각의 섭취율 계산 -->
+    <select id="intkRatChk"  parameterType="refVO" resultType="java.util.HashMap">
+		SELECT 			ih.input_history_seq as input_history_seq
+						, (#{intk_rat}-h.intk_rat)/#{fmyNum} as intk_rat
+		FROM			input_history_tb ih
+        JOIN			hav_food_tb h
+		ON 				ih.input_history_seq = h.input_history_seq
+        WHERE			h.intk_rat <![CDATA[ < ]]> #{intk_rat}
+        AND				h.input_history_seq IN 
+						<foreach collection="refChkGroup" item="item" open="(" close=")" separator=" , "> 
+       					    #{item}   
+       					</foreach>    
+    </select>
+    
+    <!-- 섭취율 update -->
+    <update id="prodctIntkRatUpdate" parameterType="refVO">
+         UPDATE 		hav_food_tb
+		 SET			intk_rat = #{intk_rat}
+		 WHERE			input_history_seq IN 
+		 				<foreach collection="refList" item="refList" open="(" close=")" separator=" , "> 
+       					    #{refList.input_history_seq}
+       					</foreach>        
+        
+    </update>
+
+    
+    
+    <!-- 식품 상세보기 -->
+    <select id="mainProdctSelectOne"  parameterType="refVO" resultMap="refValues">
+		SELECT 			ih.barcd as barcd
+						, ih.food_nme as food_nme
+						, ih.food_img as food_img
+						<!-- 	flatpickr 미국시간대라서... 9 시간 더해줘서 셀렉해야 한국시간. -->
+						, date_add(h.expiration_dat, INTERVAL 9 HOUR)  as expiration_dat
+						, date_add(ih.input_datetime, INTERVAL 9 HOUR) as input_datetime
+						<!-- 	flatpickr 미국시간대라서... 9 시간 더해줌. -->
+						, h.intk_rat  as intk_rat
+						, ih.supplied_amount as supplied_amount
+						, ih.calorie as calorie
+						, ih.carbohydrate as carbohydrate
+						, ih.protein as protein
+						, ih.fat as fat
+						, ih.sugars as sugars
+						, ih.salt as salt
+						, ih.cholesterol as cholesterol
+						, ih.saturated_fat as saturated_fat
+						, ih.unsaturated_fat as unsaturated_fat
+						, ih.input_history_seq as input_history_seq
+		FROM			input_history_tb ih
+        JOIN			hav_food_tb h
+        ON				h.input_history_seq = ih.input_history_seq
+        WHERE			h.input_history_seq = #{input_history_seq}
+
+    </select>
+    
+    
+    <!--  최근 식품 seq 조회 -->
+    <select id="recentSeqSelect"  parameterType="refVO" resultType="int">
+        SELECT 			IFNULL(MAX(ih.input_history_seq),0)
+		FROM			input_history_tb ih
+        JOIN			hav_food_tb h
+        ON				ih.input_history_seq = h.input_history_seq
+        WHERE			h.intk_rat <![CDATA[ < ]]> 100
+        AND				ih.refrigerator_seq = #{refrigerator_seq}
+        
+    </select>
+    
+     <!-- 식품 정보 수정 -->
+    <update id="prodctInfoUpdate" parameterType="refVO">
+        UPDATE 			input_history_tb ih
+		JOIN     		hav_food_tb h
+		ON  			ih.input_history_seq = h.input_history_seq
+		SET 			ih.supplied_amount = #{supplied_amount}
+						, ih.calorie = #{calorie}
+		                , ih.food_nme  = #{food_nme}
+						, h.intk_rat = #{intk_rat}
+						, ih.carbohydrate = #{carbohydrate}
+		                , ih.protein = #{protein}
+		                , ih.fat = #{fat}
+		                , ih.sugars = #{sugars}
+		                , ih.salt = #{salt}
+		                , ih.cholesterol = #{cholesterol}
+		                , ih.saturated_fat = #{saturated_fat}
+		                , ih.unsaturated_fat = #{unsaturated_fat}
+		                , ih.input_datetime = #{input_datetime}
+						, h.expiration_dat = #{expiration_dat}
+		WHERE			h.input_history_seq = #{input_history_seq}	 
+    </update>
+    
+    	
+	<!-- 	식품 상세정보 직접 등록 (input history tb) -->
+	<insert id="directInputHistoryInsert" parameterType="refVO">
+	    INSERT INTO		input_history_tb
+						(
+			            input_history_seq
+			            , input_cont
+			            , input_datetime
+			            , refrigerator_seq
+			            , mem_seq
+			            , supplied_amount
+			            , calorie
+			            , food_nme
+			            , food_img				            
+			            , carbohydrate
+			            , protein
+			            , fat
+			            , sugars
+			            , salt
+			            , cholesterol
+			            , saturated_fat
+			            , unsaturated_fat
+			            )
+			            
+		values		
+						(
+						(SELECT input_history_seq FROM (SELECT IFNULL(MAX(input_history_seq),0)+1 AS input_history_seq FROM input_history_tb) AS A)
+						, 1
+						, SYSDATE()
+						, #{refrigerator_seq}
+						, #{mem_seq}
+						, #{supplied_amount}
+			            , #{calorie}
+			            , #{food_nme}
+			            , '/resources/img/common/no_image.gif'		            
+			            , #{carbohydrate}
+			            , #{protein}
+			            , #{fat}
+			            , #{sugars}
+			            , #{salt}
+			            , #{cholesterol}
+			            , #{saturated_fat}
+			            , #{unsaturated_fat}
+			            )
+	    
+	    
+	</insert>
+
+	
+	<!-- 	직접입력한 상품 정보 등록(havFoodInsert)보유식품  -->
+	<insert id="directHavFoodInsert" parameterType="refVO">
+	    INSERT INTO		hav_food_tb
+						(
+			            input_history_seq
+			            , expiration_dat
+			            , intk_rat
+			            )
+			            
+		values		
+						(
+						(SELECT IFNULL(MAX(input_history_seq),0) FROM input_history_tb)
+						, #{expiration_dat}
+						, 0	
+			            )
+	    
+	    
+	    
+	</insert>
+ 
+	
+	
+    
+    
+    
+    <!-- 바코드 리스트 개수 조회-->
+    <select id="barcdListCount"  parameterType="refVO" resultType="int">
+        SELECT	 		COUNT(*)
+		FROM 			barcd_tb 
+		WHERE			food_nme like '%${food_nme}%'
+    </select>
+    
+    
+    <!-- 바코드 리스트 조회 -->
+    <select id="barcdListSelect"  parameterType="refVO" resultMap="refValues">
+    	SELECT	 		barcd
+    					, supplied_amount
+    					, avg_expiration_dat
+    					, calorie
+    					, carbohydrate
+    					, protein
+    					, fat
+    					, sugars
+    					, salt
+    					, cholesterol
+    					, saturated_fat
+    					, unsaturated_fat
+    					, food_nme
+    					, food_img
+		FROM 			barcd_tb 
+		WHERE			food_nme like '%${food_nme}%'
+		LIMIT			#{recordCountPerPage} OFFSET #{firstRecordIndex}
+    </select>
+    
+    
+    
+    
+</mapper>

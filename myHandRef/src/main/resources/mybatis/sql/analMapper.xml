@@ -1,0 +1,489 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="analMapper">
+
+    <resultMap id="memValues" type="memVO">
+	    <result property = "mem_seq" column="mem_seq"/>
+		<result property = "mem_id" column="mem_id"/>
+		<result property = "mem_pw" column="mem_pw"/>
+		<result property = "mem_nme" column="mem_nme"/>
+		<result property = "mem_gendr" column="mem_gendr"/>
+		<result property = "mem_age" column="mem_age"/>
+		<result property = "refrigerator_nme" column="refrigerator_nme"/>
+	</resultMap>
+      
+	<resultMap id="refValues" type="refVO">
+		<result property = "mem_seq" column="mem_seq"/>
+		<result property = "mem_nme" column="mem_nme"/>		
+		<result property = "barcd" column="barcd"/> <!-- 바코드번호 -->
+		<result property = "food_nme" column="food_nme"/> <!-- 식품 이름 -->
+		<result property = "food_img" column="food_img"/> <!-- 식품 이미지 경로 -->
+		<result property = "supplied_amount" column="supplied_amount"/> <!-- 1회 제공량 -->
+		<result property = "avg_expiration_dat" column="avg_expiration_dat"/> <!-- 평균 유통기한 일수 -->
+		<result property = "calorie" column="calorie"/> <!-- 열량 -->
+		<result property = "carbohydrate" column="carbohydrate"/> <!--  탄수화물 -->
+		<result property = "protein" column="protein"/> <!-- 단백질 -->
+		<result property = "fat" column="fat"/> <!-- 지방 -->
+		<result property = "sugars" column="sugars"/> <!-- 당류 -->
+		<result property = "salt" column="salt"/> <!--  나트륨 -->
+		<result property = "cholesterol" column="cholesterol"/> <!-- 콜레스테롤 -->
+		<result property = "saturated_fat" column="saturated_fat"/> <!-- 포화지방산 -->
+		<result property = "unsaturated_fat" column="unsaturated_fat"/> <!-- 트랜스지방산 -->
+		<result property = "input_history_seq" column="input_history_seq"/> <!-- 입고내역 고유값 -->
+		
+		<result property = "deadLine" column="deadLine"/> <!-- 유통기한 임박 7일 기준 -->
+		<result property = "expiration_dat" column="expiration_dat"/> <!-- 유통기한 -->
+		<result property = "input_datetime" column="input_datetime"/> <!-- 입고일 -->
+		<result property = "input_cont" column="input_cont"/> <!-- 입고횟수 -->
+		<result property = "intk_rat" column="intk_rat"/> <!-- 섭취율 -->
+
+		<result property = "state" column="state"/> <!-- 상태 (색) -->
+				
+		<result property = "search_dat" column="search_dat"/>
+		<result property = "start_dat" column="start_dat"/>
+		<result property = "end_dat" column="end_dat"/>
+		
+		<result property = "refrigerator_seq" column="refrigerator_seq"/>
+	</resultMap>
+	
+	
+	<!-- 권장 영양성분 조회 -->
+	<select id="recmndInfoSelect" parameterType="memVO" resultMap="refValues">
+	    SELECT 			calorie
+	    				, carbohydrate
+	    				, protein
+	    				, fat
+	    				, sugars
+	    				, salt
+	    				, cholesterol
+	    				, saturated_fat
+	    				, unsaturated_fat
+		FROM 			my_hand_ref.recmnd_nutrnt_intk_tb
+		WHERE 			gendr = #{mem_gendr}
+		AND	  			age = #{mem_age}
+	</select>
+	
+	
+	<!-- 섭취 영양성분 조회 (투데이) -->
+	<select id="intkInfoSelect" parameterType="refVO" resultMap="refValues">
+		SELECT 			IFNULL(SUM(calorie),0) as calorie
+	    				, IFNULL(SUM(carbohydrate),0) as carbohydrate
+	    				, IFNULL(SUM(protein),0) as protein
+	    				, IFNULL(SUM(fat),0) as fat
+	    				, IFNULL(SUM(sugars),0) as sugars
+	    				, IFNULL(SUM(salt),0) as salt
+	    				, IFNULL(SUM(cholesterol),0) as cholesterol
+	    				, IFNULL(SUM(saturated_fat),0) as saturated_fat
+	    				, IFNULL(SUM(unsaturated_fat),0) as unsaturated_fat
+		FROM 			intk_info_tb 
+		WHERE 			mem_seq = #{mem_seq}
+		AND				date_format(intk_datetime,'%y-%m-%d') = date_format(sysdate(),'%y-%m-%d')
+	</select>
+	
+	<!-- 권장 / 하루 섭취 비율 구함 (권장 섭취 식품 리스트 조회) -->
+	<select id="todayIntkPercntSelect" parameterType="memVO" resultType="java.util.HashMap">	    
+	   SELECT  			intk_rat
+						, nut_nme, 
+						(CASE WHEN  intk_rat <![CDATA[ < ]]> 30 THEN '3'
+							 WHEN  intk_rat <![CDATA[ < ]]> 50 THEN '2'
+							 WHEN  intk_rat <![CDATA[ < ]]> 70 THEN '1'
+							 ELSE '0'
+							 END) as state
+
+		FROM			(
+						SELECT 		CEILING(IFNULL(SUM(i.carbohydrate),0) / ri.carbohydrate * 100) as intk_rat	
+										, 'carbohydrate' as nut_nme
+						FROM 			intk_info_tb i
+				        JOIN			recmnd_nutrnt_intk_tb ri
+				        WHERE 			ri.gendr = #{mem_gendr}
+						AND	  			ri.age = #{mem_age}
+						AND 			i.mem_seq = #{mem_seq}
+						AND	  			date_format(intk_datetime,'%y-%m-%d') = date_format(sysdate(),'%y-%m-%d')
+				
+				        UNION
+				        
+				        SELECT 			CEILING(IFNULL(SUM(i.protein),0) / ri.protein * 100) as intk_rat 
+										, 'protein' as nut_nme       
+						FROM 			intk_info_tb i
+				        JOIN			recmnd_nutrnt_intk_tb ri
+				        WHERE 			ri.gendr = #{mem_gendr}
+						AND	  			ri.age = #{mem_age}
+						AND 			i.mem_seq = #{mem_seq}
+						AND	  			date_format(intk_datetime,'%y-%m-%d') = date_format(sysdate(),'%y-%m-%d')
+				
+						UNION
+						
+				        SELECT 			CEILING(IFNULL(SUM(i.fat),0) /  ri.fat * 100) as intk_rat
+										, 'fat' as nut_nme            
+						FROM 			intk_info_tb i
+				        JOIN			recmnd_nutrnt_intk_tb ri
+				        WHERE 			ri.gendr = #{mem_gendr}
+						AND	  			ri.age = #{mem_age}
+						AND 			i.mem_seq = #{mem_seq}
+						AND	  			date_format(intk_datetime,'%y-%m-%d') = date_format(sysdate(),'%y-%m-%d')
+				        ) A
+
+        order by 		intk_rat ASC
+	</select>
+
+	
+	<!-- 권장 섭취 식품 리스트 조회 -->
+	<select id="todayRecmndSelect" parameterType="refVO" resultMap="refValues">
+	SELECT 			food_nme
+					, expiration_dat
+					, group_concat(distinct nut_nme SEPARATOR ',') AS nut_nme
+					, state
+					, SEQ
+					, nut_g
+	FROM 
+	(
+	    <foreach collection="refList" item="item" index="index" open="(" close=") " separator=") UNION (">   
+			SELECT 			#{index} as SEQ
+							, ih.food_nme as food_nme
+							, date_format(h.expiration_dat, '%y-%m-%d') as expiration_dat
+							 <choose>
+						         <when test="item.nut_nme == 'carbohydrate'">
+						            , '탄수화물' as nut_nme
+						         </when>
+						        <when test="item.nut_nme == 'protein'">
+						              , '단백질' as nut_nme
+						         </when>
+						         <when test="item.nut_nme == 'fat'">
+						              , '지방' as nut_nme
+						         </when>
+						         <otherwise>
+						           , '기타' as nut_nme
+						         </otherwise>
+						     </choose>     
+							 <choose>
+						         <when test="item.state == 3">
+						            , 'red' as state
+						         </when>
+						        <when test="item.state == 2">
+						              , 'orange' as state
+						         </when>
+						         <when test="item.state == 1">
+						              , 'red' as state
+						         </when>
+						         <otherwise>
+						           , 'black' as state
+						         </otherwise>
+						      </choose>  
+						     ,  ih.${item.nut_nme} as nut_g
+							 
+			FROM 			input_history_tb ih
+			JOIN 			hav_food_tb h
+			ON 	 			ih.input_history_seq = h.input_history_seq
+			WHERE			ih.refrigerator_seq = #{refrigerator_seq}
+			ORDER 
+			by 				ih.${item.nut_nme} DESC
+			LIMIT			${item.state}
+		 </foreach>
+	 ) A
+     GROUP 
+     BY						food_nme
+     ORDER   
+	 BY						SEQ, nut_g DESC
+	</select>
+	
+	
+	
+	<!-- 투데이 섭취 식품 조회 -->
+	<select id="todayIntkSelect" parameterType="memVO" resultMap="refValues">
+		SELECT 			ih.barcd as barcd
+						, sum(ii.calorie) as calorie
+		                , sum(ii.intk_rat) as intk_rat
+		                , CONCAT(format(sum(ii.intk_rat)/100,1), '개') as count
+						, ih.food_nme as food_nme
+		FROM 			intk_info_tb ii
+		JOIN 			input_history_tb ih
+		ON 				ih.input_history_seq = ii.input_history_seq
+		WHERE 			ii.mem_seq = #{mem_seq}
+		AND				date_format(ii.intk_datetime,'%y-%m-%d') = date_format(sysdate(),'%y-%m-%d')
+		group by 		IFNULL(ih.barcd, ih.input_history_seq)
+				
+<!-- 		간편등록 상품일 경우 바코드가 없다. NULL처리 - 바코드 번호를 넣어버리면 바코드 관리에서 겹치게 될 수 도 있다. -->
+<!-- 		바코드 관리를 통해서 한번 바코드로 직접 등록하고 계속해서 활용할 수 있지만, (직접 등록 상품)  -->
+<!-- 		딱 한번만 등록할만한 직접 등록 상품이라면 직접 등록을 사용하는데 이 때에는 바코드가 없다. -->
+<!-- 		GROUP BY를 IFNULL로 처리	     -->
+
+	</select>
+
+	
+	<!-- 투데이 가족구성원별 생활패턴 분석 조회 (1~6시) -->
+	<select id="fmy1to6Select" parameterType="java.util.List" resultMap="refValues">	    
+	    <foreach collection="list" item="item" index="index" open="" close="" separator=" UNION ALL">   
+		SELECT  		IFNULL(sum(calorie),0) as calorie
+		FROM 			my_hand_ref.intk_info_tb
+	    WHERE 			mem_seq = #{item.mem_seq}
+		AND 			DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')
+		AND 			TIME_FORMAT(intk_datetime, '%H ')  between 0 AND 5
+		</foreach>
+	</select>
+	
+	<!-- 투데이 가족구성원별 생활패턴 분석 조회 (6~12시) -->
+	<select id="fmy6to12Select" parameterType="java.util.List" resultMap="refValues">	    
+	    <foreach collection="list" item="item" index="index" open="" close="" separator=" UNION ALL">   
+		SELECT  		IFNULL(sum(calorie),0) as calorie
+		FROM 			my_hand_ref.intk_info_tb
+	    WHERE 			mem_seq = #{item.mem_seq}
+		AND 			DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')
+		AND 			TIME_FORMAT(intk_datetime, '%H ')  between 6 AND 11
+		</foreach>
+	</select>
+	
+	<!-- 투데이 가족구성원별 생활패턴 분석 조회 (12~18시) -->
+	<select id="fmy12to18Select" parameterType="java.util.List" resultMap="refValues">	    
+	    <foreach collection="list" item="item" index="index" open="" close="" separator=" UNION ALL">   
+		SELECT  		IFNULL(sum(calorie),0) as calorie
+		FROM 			my_hand_ref.intk_info_tb
+	    WHERE 			mem_seq = #{item.mem_seq}
+		AND 			DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')
+		AND 			TIME_FORMAT(intk_datetime, '%H ')  between 12 AND 17
+		</foreach>
+	</select>
+	
+	<!-- 투데이 가족구성원별 생활패턴 분석 조회 (18~24시) -->
+	<select id="fmy18to24Select" parameterType="java.util.List" resultMap="refValues">	    
+	    <foreach collection="list" item="item" index="index" open="" close="" separator=" UNION ALL">   
+		SELECT  		IFNULL(sum(calorie),0) as calorie
+		FROM 			my_hand_ref.intk_info_tb
+	    WHERE 			mem_seq = #{item.mem_seq}
+		AND 			DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')
+		AND 			TIME_FORMAT(intk_datetime, '%H ')  between 18 AND 23
+		</foreach>
+	</select>	
+		
+	
+	<!-- 섭취 영양성분 조회 (영양성분 분석 - 리스트) -->
+	<select id="intkInfoNutListSelect" parameterType="refVO" resultMap="refValues">
+		SELECT 			
+					date_format(intk_datetime,'%y-%m-%d') as search_dat
+					
+			 <foreach collection="nutAnalCheckGroup" item="item" index="index" open="," close="" separator=",">
+				<if test="item == 1">
+					IFNULL(SUM(calorie),0) as calorie
+				</if>
+				<if test="item == 2">
+					IFNULL(SUM(carbohydrate),0) as carbohydrate
+    				, IFNULL(SUM(protein),0) as protein
+    				, IFNULL(SUM(fat),0) as fat
+				</if>
+				<if test="item == 3">
+					IFNULL(SUM(sugars),0) as sugars
+	    			, IFNULL(SUM(salt),0) as salt
+				</if>
+				<if test="item == 4">
+					IFNULL(SUM(cholesterol),0) as cholesterol
+    				, IFNULL(SUM(saturated_fat),0) as saturated_fat
+    				, IFNULL(SUM(unsaturated_fat),0) as unsaturated_fat
+				</if>
+			</foreach>
+		FROM 			intk_info_tb 
+		WHERE 			mem_seq = #{mem_seq}
+		<choose>
+			<when test="search_dat eq null || search_dat eq ''">
+				AND	  		date_format(intk_datetime,'%y-%m-%d') = date_format(sysdate(),'%y-%m-%d')
+			</when>
+			<otherwise>
+				AND			intk_datetime BETWEEN #{start_dat} and #{end_dat}
+			</otherwise>
+		</choose>	
+		GROUP BY 		search_dat
+		ORDER BY 		search_dat DESC
+	</select>
+
+	<!-- 섭취 영양성분 조회 (영양성분 분석 - 차트) -->
+	<select id="intkInfoNutChartSelect" parameterType="refVO" resultMap="refValues">
+		SELECT 			
+		<choose>
+			<when test="search_dat eq null || search_dat eq ''">
+			    	date_format(intk_datetime,'%y-%m-%d') as search_dat			
+					, IFNULL(SUM(calorie),0) as calorie			
+					, IFNULL(SUM(carbohydrate),0) as carbohydrate
+    				, IFNULL(SUM(protein),0) as protein
+    				, IFNULL(SUM(fat),0) as fat				
+					, IFNULL(SUM(sugars),0) as sugars
+	    			, IFNULL(SUM(salt),0) as salt
+					, IFNULL(SUM(cholesterol),0) as cholesterol
+    				, IFNULL(SUM(saturated_fat),0) as saturated_fat
+    				, IFNULL(SUM(unsaturated_fat),0) as unsaturated_fat
+			</when>
+			<otherwise>
+					date_format(intk_datetime,'%y-%m-%d') as search_dat			
+					, IFNULL(SUM(calorie)/ (TO_DAYS(#{end_dat}) - TO_DAYS(#{start_dat})),0)  as calorie			
+					, IFNULL(SUM(carbohydrate)/ (TO_DAYS(#{end_dat}) - TO_DAYS(#{start_dat})),0)  as carbohydrate
+    				, IFNULL(SUM(protein)/ (TO_DAYS(#{end_dat}) - TO_DAYS(#{start_dat})),0)  as protein
+    				, IFNULL(SUM(fat)/ (TO_DAYS(#{end_dat}) - TO_DAYS(#{start_dat})),0)  as fat				
+					, IFNULL(SUM(sugars)/ (TO_DAYS(#{end_dat}) - TO_DAYS(#{start_dat})),0)  as sugars
+	    			, IFNULL(SUM(salt)/ (TO_DAYS(#{end_dat}) - TO_DAYS(#{start_dat})),0)  as salt
+					, IFNULL(SUM(cholesterol)/ (TO_DAYS(#{end_dat}) - TO_DAYS(#{start_dat})),0)  as cholesterol
+    				, IFNULL(SUM(saturated_fat)/ (TO_DAYS(#{end_dat}) - TO_DAYS(#{start_dat})),0)  as saturated_fat
+    				, IFNULL(SUM(unsaturated_fat)/ (TO_DAYS(#{end_dat}) - TO_DAYS(#{start_dat})),0)  as unsaturated_fat
+			</otherwise>
+		</choose>	
+		FROM 			intk_info_tb 
+		WHERE 			mem_seq = #{mem_seq}
+		<choose>
+			<when test="search_dat eq null || search_dat eq ''">
+				AND	  		date_format(intk_datetime,'%y-%m-%d') = date_format(sysdate(),'%y-%m-%d')
+			</when>
+			<otherwise>
+				AND			intk_datetime BETWEEN #{start_dat} and #{end_dat}
+			</otherwise>
+		</choose>	
+	</select>
+	
+
+	<!-- 섭취 영양성분 조회 (생활패턴 분석-리스트) -->
+	<select id="intkInfoPatternSelect"  parameterType="refVO" resultMap="refValues">
+	    SELECT  		date_format(intk_datetime,'%y-%m-%d') as search_dat	
+	    				, IFNULL(sum(calorie),0) as calorie
+						, IFNULL(SUM(carbohydrate),0) as carbohydrate
+                        , IFNULL(SUM(protein),0) as protein
+                        , IFNULL(SUM(fat),0) as fat 
+                        
+                        , (	SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 0 AND 3  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as calorie0to4
+                        , (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 0 AND 3  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as carbohydrate0to4
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 0 AND 3  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as protein0to4
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 0 AND 3  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as fat0to4
+                        
+						, ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 4 AND 7  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as calorie4to8
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 4 AND 7  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as carbohydrate4to8
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 4 AND 7  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as protein4to8
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 4 AND 7  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as fat4to8
+                        
+                        , ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 8 AND 11  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as calorie8to12
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 8 AND 11  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as carbohydrate8to12
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 8 AND 11  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as protein8to12
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 8 AND 11  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as fat8to12
+                        
+                        , ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 12 AND 15  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as calorie12to16
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 12 AND 15  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as carbohydrate12to16
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 12 AND 15  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as protein12to16
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 12 AND 15  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as fat12to16
+                        
+                        , ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 15 AND 19  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as calorie16to20
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 15 AND 19  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as carbohydrate16to20
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 15 AND 19  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as protein16to20
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 15 AND 19  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as fat16to20
+                          
+                        , ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 20 AND 23  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as calorie20to24
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 20 AND 23  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as carbohydrate20to24
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 20 AND 23  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as protein20to24
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 20 AND 23  AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')  ) as fat20to24
+                                                
+		FROM 			intk_info_tb 
+	    WHERE 			mem_seq = #{mem_seq}
+	    <choose>
+			<when test="search_dat eq null || search_dat eq ''">
+				 AND 			DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')
+			</when>
+			<otherwise>
+				AND			intk_datetime BETWEEN #{start_dat} and #{end_dat}
+			</otherwise>
+		</choose>	
+		GROUP BY 		search_dat
+		ORDER BY 		search_dat DESC
+	</select>
+	
+	
+	<!-- 섭취 영양성분 조회 (생활패턴 분석-차트) -->
+	<select id="intkInfoPatternChartSelect"  parameterType="refVO" resultMap="refValues">
+	    SELECT  		IFNULL(sum(calorie),0) as calorie
+						, IFNULL(SUM(carbohydrate),0) as carbohydrate
+                        , IFNULL(SUM(protein),0) as protein
+                        , IFNULL(SUM(fat),0) as fat  
+                        
+                        , (	SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 0 AND 3) as calorie0to4
+                        , (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 0 AND 3 ) as carbohydrate0to4
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 0 AND 3 ) as protein0to4
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 0 AND 3 ) as fat0to4
+                        
+						, ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 4 AND 7 ) as calorie4to8
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 4 AND 7 ) as carbohydrate4to8
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 4 AND 7 ) as protein4to8
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 4 AND 7 ) as fat4to8
+                        
+                        , ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 8 AND 11 ) as calorie8to12
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 8 AND 11 ) as carbohydrate8to12
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 8 AND 11 ) as protein8to12
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 8 AND 11 ) as fat8to12
+                        
+                        , ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 12 AND 15 ) as calorie12to16
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 12 AND 15 ) as carbohydrate12to16
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 12 AND 15 ) as protein12to16
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 12 AND 15 ) as fat12to16
+                        
+                        , ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 15 AND 19 ) as calorie16to20
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 15 AND 19 ) as carbohydrate16to20
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 15 AND 19 ) as protein16to20
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 15 AND 19 ) as fat16to20
+                          
+                        , ( SELECT IFNULL(sum(calorie),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 20 AND 23 ) as calorie20to24
+						, (	SELECT IFNULL(sum(carbohydrate),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 20 AND 23 ) as carbohydrate20to24
+                        , (	SELECT IFNULL(sum(protein),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 20 AND 23 ) as protein20to24
+                        , (	SELECT IFNULL(sum(fat),0)  FROM intk_info_tb  WHERE mem_seq = #{mem_seq}  AND  TIME_FORMAT(intk_datetime, '%H ')  between 20 AND 23 ) as fat20to24
+                                               
+		FROM 			intk_info_tb 
+	    WHERE 			mem_seq = #{mem_seq}
+	    <choose>
+			<when test="search_dat eq null || search_dat eq ''">
+				 AND 			DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')
+			</when>
+			<otherwise>
+				AND			intk_datetime BETWEEN #{start_dat} and #{end_dat}
+			</otherwise>
+		</choose>	
+	</select>	
+
+	
+		
+	<!-- 섭취 영양성분 조회 (가족구성원 분석 -리스트) -->
+	<select id="intkInfoFmySelect" parameterType="refVO" resultType="java.util.HashMap">	    	   
+		SELECT  		
+						date_format(intk_datetime,'%y-%m-%d') as search_dat	
+						<foreach collection="fmyGroup" item="item" index="index" open="" close="" separator=" ">   
+                        , (SELECT IFNULL(sum(carbohydrate),0) as carbohydrate FROM intk_info_tb  WHERE 	mem_seq = #{item.mem_seq} AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')) AS carbohydrate#{item.mem_seq}
+                        , (SELECT IFNULL(sum(protein),0) as protein FROM intk_info_tb  WHERE 	mem_seq = #{item.mem_seq} AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')) AS protein#{item.mem_seq}
+                        , (SELECT IFNULL(sum(fat),0) as fat FROM intk_info_tb  WHERE 	mem_seq = #{item.mem_seq} AND search_dat = DATE_FORMAT(intk_datetime,'%y-%m-%d')) AS fat#{item.mem_seq}
+                        </foreach>                      
+		FROM 			intk_info_tb
+		 <choose>
+			<when test="search_dat eq null || search_dat eq ''">
+				 WHERE 			DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')
+			</when>
+			<otherwise>
+				 WHERE			intk_datetime BETWEEN #{start_dat} and #{end_dat}
+			</otherwise>
+		</choose>			
+        GROUP BY	search_dat
+        ORDER BY 	search_dat DESC
+	</select>
+	
+	
+	<!-- 섭취 영양성분 조회 (가족구성원 분석 -차트) -->
+	<select id="intkInfoFmyChartSelect" parameterType="refVO" resultType="java.util.HashMap">	
+	    SELECT  		
+    				<choose>
+						<when test="search_dat eq null || search_dat eq ''">
+							 <foreach collection="fmyGroup" item="item" index="index" open="" close="" separator=", ">       
+								(SELECT IFNULL(sum(carbohydrate),0) as carbohydrate FROM intk_info_tb 	WHERE 	mem_seq = #{item.mem_seq}  AND DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')) AS carbohydrate#{item.mem_seq}
+		                        , (SELECT IFNULL(sum(protein),0) 	as protein FROM intk_info_tb  		WHERE 	mem_seq = #{item.mem_seq}  AND DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')) AS protein#{item.mem_seq}
+		                        , (SELECT IFNULL(sum(fat),0) 		as fat FROM intk_info_tb  			WHERE 	mem_seq = #{item.mem_seq}  AND DATE_FORMAT(intk_datetime,'%y-%m-%d') = DATE_FORMAT(sysdate(),'%y-%m-%d')) AS fat#{item.mem_seq}
+							</foreach>
+						</when>
+						<otherwise>
+							<foreach collection="fmyGroup" item="item" index="index" open="" close="" separator=", ">       
+								(SELECT IFNULL(sum(carbohydrate),0) as carbohydrate FROM intk_info_tb 	WHERE 	mem_seq = #{item.mem_seq}  AND intk_datetime BETWEEN #{start_dat} and #{end_dat}) AS carbohydrate#{item.mem_seq}
+		                        , (SELECT IFNULL(sum(protein),0) 	as protein FROM intk_info_tb  		WHERE 	mem_seq = #{item.mem_seq}  AND intk_datetime BETWEEN #{start_dat} and #{end_dat}) AS protein#{item.mem_seq}
+		                        , (SELECT IFNULL(sum(fat),0) 		as fat FROM intk_info_tb  			WHERE 	mem_seq = #{item.mem_seq}  AND intk_datetime BETWEEN #{start_dat} and #{end_dat}) AS fat#{item.mem_seq}
+							</foreach>
+						</otherwise>
+					</choose>	
+                             
+		FROM 			DUAL
+	</select>
+	
+</mapper>

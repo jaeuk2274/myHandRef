@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="commonMapper">
+
+	<resultMap id="memValues" type="memVO">
+	    <result property = "mem_seq" column="mem_seq"/>
+		<result property = "mem_id" column="mem_id"/>
+		<result property = "mem_pw" column="mem_pw"/>
+		<result property = "mem_nme" column="mem_nme"/>
+		<result property = "mem_gendr" column="mem_gendr"/>
+		<result property = "mem_age" column="mem_age"/>
+		<result property = "refrigerator_nme" column="refrigerator_nme"/>
+		<result property = "refrigerator_seq" column="refrigerator_seq"/>
+	</resultMap>
+	
+    <select id="memLogin" parameterType="memVO" resultMap="memValues">
+			SELECT 		m.mem_seq as mem_seq
+						, m.mem_id as mem_id
+                        , m.mem_nme as mem_nme
+						, m.mem_gendr as mem_gendr
+					 	, m.mem_age as mem_age
+						, r.refrigerator_nme as refrigerator_nme
+						, r.refrigerator_seq as refrigerator_seq
+            FROM 		mem_tb m
+            JOIN 		refrigerator_bridg_tb rb
+            ON	 		m.mem_seq = rb.mem_seq
+            JOIN 		refrigerator_tb r
+            ON 	 		rb.refrigerator_seq = r.refrigerator_seq
+			WHERE		mem_id = #{mem_id}	
+			AND			mem_pw = #{mem_pw}		
+	</select>
+</mapper>
